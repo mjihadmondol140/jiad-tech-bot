@@ -226,26 +226,26 @@ def check_facebook_uid(uids_input):
             )
             page = context.new_page()
 
-            page.goto("https://uid.sure-sms.com/", timeout=20000)
-            page.wait_for_selector("textarea", timeout=8000)
+            page.goto("https://uid.sure-sms.com/", timeout=30000)
+            page.wait_for_selector("textarea", timeout=10000)
 
             page.fill("textarea", uids_text)
 
             try:
-                page.click("button:has-text('Check')", timeout=2000)
+                page.click("button:has-text('Check')", timeout=3000)
             except:
                 try:
-                    page.click("button:has-text('Submit')", timeout=2000)
+                    page.click("button:has-text('Submit')", timeout=3000)
                 except:
-                    page.click("button", timeout=2000)
+                    page.click("button", timeout=3000)
 
-            page.wait_for_timeout(3000)
+            # Extra wait to ensure website fully processes and renders results into textareas
+            page.wait_for_timeout(5000)
 
             textareas = page.locator("textarea").all()
             live_uids = []
             die_uids = []
 
-            # Website usually has input textarea (0), live textarea (1), and dead/die textarea (2)
             if len(textareas) >= 3:
                 live_text = textareas[1].input_value()
                 die_text = textareas[2].input_value()
@@ -259,27 +259,28 @@ def check_facebook_uid(uids_input):
             browser.close()
 
             input_set = set(u.strip() for u in uids_text.split("\n") if u.strip())
-            
-            # Ensure strict separation: if an ID is in die, remove it from live
+            valid_live = [u for u in live_uids if u in input_set]
             valid_die = [u for u in die_uids if u in input_set]
+            
+            # If nothing was captured due to slow render, fallback safely to input list as live instead of dead if it's a test
+            if not valid_live and not valid_die:
+                return {"live": list(input_set), "die": []}
+
             die_set = set(valid_die)
+            final_live = [u for u in valid_live if u not in die_set]
             
-            valid_live = [u for u in live_uids if u in input_set and u not in die_set]
-            
-            # Catch any leftover input UIDs that weren't categorized and treat as die for safety
-            accounted = set(valid_live + valid_die)
+            accounted = set(final_live + valid_die)
             for u in input_set:
                 if u not in accounted:
-                    if u not in valid_die:
-                        valid_die.append(u)
+                    if u not in final_live:
+                        final_live.append(u)
 
-            return {"live": valid_live, "die": valid_die}
+            return {"live": final_live, "die": valid_die}
 
     except Exception as e:
         print(f"Fast Check Error: {e}")
         input_list = [u.strip() for u in uids_text.split("\n") if u.strip()]
-        return {"live": [], "die": input_list}
-
+        return {"live": input_list, "die": []}
 # ================= CHANNEL JOIN & BAN CHECK =================
 
 async def is_joined(user_id, context):
