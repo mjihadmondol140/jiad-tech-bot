@@ -1,5 +1,5 @@
 python-telegram-bot
 openpyxl
 Flask
-playwright
+playwright==1.64.1
 tzdata
