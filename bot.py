@@ -210,78 +210,64 @@ def check_facebook_uid(uids_input):
     input_list = [u.strip() for u in uids_text.split("\n") if u.strip()]
 
     try:
-        import requests
-        
-        # Direct HTTP POST request to the website backend to avoid Playwright browser rendering issues on Render
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        
-        # Sending Uids to the site form
-        response = requests.post("https://uid.sure-sms.com/", data={"uids": uids_text}, headers=headers, timeout=15)
-        html_content = response.text
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu"
+                ]
+            )
+            context = browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    " (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                )
+            )
+            page = context.new_page()
 
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        textareas = soup.find_all('textarea')
-        live_uids = []
-        die_uids = []
+            page.goto("https://uid.sure-sms.com/", timeout=30000)
+            page.wait_for_selector("textarea", timeout=10000)
 
-        if len(textareas) >= 3:
-            live_text = textareas[1].get_text()
-            die_text = textareas[2].get_text()
-            live_uids = [u.strip() for u in live_text.split("\n") if u.strip()]
-            die_uids = [u.strip() for u in die_text.split("\n") if u.strip()]
-        elif len(textareas) == 2:
-            live_text = textareas[1].get_text()
-            live_uids = [u.strip() for u in live_text.split("\n") if u.strip()]
+            page.fill("textarea", uids_text)
 
-        input_set = set(input_list)
-        final_die = [u for u in die_uids if u in input_set]
-        die_set = set(final_die)
-        
-        final_live = [u for u in live_uids if u in input_set and u not in die_set]
+            try:
+                page.click("button:has-text('Check')", timeout=3000)
+            except:
+                try:
+                    page.click("button:has-text('Submit')", timeout=3000)
+                except:
+                    page.click("button", timeout=3000)
 
-        # Fallback check if scraping textareas directly needs adjustment
-        for uid in input_list:
-            if uid not in final_live and uid not in final_die:
-                # Check if it appears in dead text or live text explicitly
-                if any(uid in d for d in die_uids):
-                    if uid not in final_die:
-                        final_die.append(uid)
+            page.wait_for_timeout(5000)
+
+            # Get all textareas values from the page
+            textareas = page.eval_on_selector_all("textarea", "els => els.map(e => e.value)")
+            browser.close()
+
+            live_uids = []
+            if len(textareas) >= 2:
+                live_text = textareas[1]
+                live_uids = [u.strip() for u in live_text.split("\n") if u.strip()]
+
+            live_set = set(live_uids)
+            final_live = []
+            final_die = []
+
+            # Foolproof logic: If an input ID is in the site's live result, it's Live. Otherwise, it's Dead!
+            for uid in input_list:
+                if uid in live_set:
+                    final_live.append(uid)
                 else:
-                    if uid not in final_live:
-                        final_live.append(uid)
+                    final_die.append(uid)
 
-        return {"live": final_live, "die": final_die}
+            return {"live": final_live, "die": final_die}
 
     except Exception as e:
-        print(f"Direct Request Check Error: {e}")
-        # Fallback to Playwright if requests fail
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
-                page = browser.new_page()
-                page.goto("https://uid.sure-sms.com/", timeout=20000)
-                page.fill("textarea", uids_text)
-                page.click("button:has-text('Check'), button:has-text('Submit'), button")
-                page.wait_for_timeout(4000)
-                textareas = page.eval_on_selector_all("textarea", "els => els.map(e => e.value)")
-                browser.close()
-
-                live_uids = [u.strip() for u in textareas[1].split("\n") if u.strip()] if len(textareas) >= 2 else []
-                die_uids = [u.strip() for u in textareas[2].split("\n") if u.strip()] if len(textareas) >= 3 else []
-
-                final_die = [u for u in die_uids if u in input_list]
-                final_live = [u for u in live_uids if u in input_list and u not in final_die]
-                if not final_live and not final_die:
-                    return {"live": input_list, "die": []}
-                return {"live": final_live, "die": final_die}
-        except Exception as ex:
-            print(f"Playwright Fallback Error: {ex}")
-            return {"live": input_list, "die": []}
+        print(f"Fast Check Error: {e}")
+        return {"live": input_list, "die": []}
 # ================= CHANNEL JOIN & BAN CHECK =================
 
 async def is_joined(user_id, context):
