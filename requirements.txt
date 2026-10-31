@@ -2,3 +2,4 @@ python-telegram-bot
 openpyxl
 Flask
 playwright
+tzdata
