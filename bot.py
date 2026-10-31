@@ -207,8 +207,6 @@ def check_facebook_uid(uids_input):
     else:
         uids_text = str(uids_input).strip()
 
-    input_list = [u.strip() for u in uids_text.split("\n") if u.strip()]
-
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
@@ -241,7 +239,6 @@ def check_facebook_uid(uids_input):
                 except:
                     page.click("button", timeout=3000)
 
-            # Wait for results to be populated in the output boxes
             page.wait_for_timeout(4000)
 
             textareas = page.locator("textarea").all()
@@ -251,33 +248,30 @@ def check_facebook_uid(uids_input):
             if len(textareas) >= 3:
                 live_text = textareas[1].input_value()
                 die_text = textareas[2].input_value()
+
                 live_uids = [u.strip() for u in live_text.split("\n") if u.strip()]
                 die_uids = [u.strip() for u in die_text.split("\n") if u.strip()]
+            elif len(textareas) == 2:
+                live_text = textareas[1].input_value()
+                live_uids = [u.strip() for u in live_text.split("\n") if u.strip()]
 
             browser.close()
 
-            live_set = set(live_uids)
-            die_set = set(die_uids)
+            input_set = set(u.strip() for u in uids_text.split("\n") if u.strip())
+            valid_live = [u for u in live_uids if u in input_set]
+            valid_die = [u for u in die_uids if u in input_set]
+            
+            accounted = set(valid_live + valid_die)
+            for u in input_set:
+                if u not in accounted:
+                    if u not in valid_die:
+                        valid_die.append(u)
 
-            final_live = []
-            final_die = []
-
-            for uid in input_list:
-                if uid in die_set:
-                    final_die.append(uid)
-                elif uid in live_set:
-                    final_live.append(uid)
-                else:
-                    # If not explicitly found in live or die textareas, check where it belongs or default safely based on presence
-                    if die_text and uid in die_text:
-                        final_die.append(uid)
-                    else:
-                        final_live.append(uid)
-
-            return {"live": final_live, "die": final_die}
+            return {"live": valid_live, "die": valid_die}
 
     except Exception as e:
         print(f"Fast Check Error: {e}")
+        input_list = [u.strip() for u in uids_text.split("\n") if u.strip()]
         return {"live": input_list, "die": []}
 # ================= CHANNEL JOIN & BAN CHECK =================
 
