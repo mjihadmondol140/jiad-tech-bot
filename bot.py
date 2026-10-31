@@ -239,12 +239,13 @@ def check_facebook_uid(uids_input):
                 except:
                     page.click("button", timeout=2000)
 
-            page.wait_for_timeout(2500)
+            page.wait_for_timeout(3000)
 
             textareas = page.locator("textarea").all()
             live_uids = []
             die_uids = []
 
+            # Website usually has input textarea (0), live textarea (1), and dead/die textarea (2)
             if len(textareas) >= 3:
                 live_text = textareas[1].input_value()
                 die_text = textareas[2].input_value()
@@ -258,9 +259,14 @@ def check_facebook_uid(uids_input):
             browser.close()
 
             input_set = set(u.strip() for u in uids_text.split("\n") if u.strip())
-            valid_live = [u for u in live_uids if u in input_set]
-            valid_die = [u for u in die_uids if u in input_set]
             
+            # Ensure strict separation: if an ID is in die, remove it from live
+            valid_die = [u for u in die_uids if u in input_set]
+            die_set = set(valid_die)
+            
+            valid_live = [u for u in live_uids if u in input_set and u not in die_set]
+            
+            # Catch any leftover input UIDs that weren't categorized and treat as die for safety
             accounted = set(valid_live + valid_die)
             for u in input_set:
                 if u not in accounted:
@@ -272,8 +278,7 @@ def check_facebook_uid(uids_input):
     except Exception as e:
         print(f"Fast Check Error: {e}")
         input_list = [u.strip() for u in uids_text.split("\n") if u.strip()]
-        return {"live": input_list, "die": []}
-
+        return {"live": [], "die": input_list}
 
 # ================= CHANNEL JOIN & BAN CHECK =================
 
